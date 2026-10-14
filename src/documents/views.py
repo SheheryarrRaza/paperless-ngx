@@ -24,8 +24,10 @@ from urllib.parse import quote
 from urllib.parse import urlparse
 
 import httpx
+import jwt
 import magic
 import pathvalidate
+import requests
 from django.conf import settings
 from django.contrib.auth.models import Group
 from django.contrib.auth.models import User
@@ -186,6 +188,7 @@ from documents.permissions import user_is_unrestricted
 from documents.plugins.date_parsing import get_date_parser
 from documents.schema import generate_object_with_permissions_schema
 from documents.search import SearchHit
+from documents.serialisers import AccountPreferencesSerializer
 from documents.serialisers import AcknowledgeTasksViewSerializer
 from documents.serialisers import BulkDownloadSerializer
 from documents.serialisers import BulkEditObjectsSerializer
@@ -5697,3 +5700,125 @@ def serve_logo(request: HttpRequest, filename: str | None = None) -> FileRespons
         filename=logo_name,
         as_attachment=True,
     )
+
+
+class DocumentCountsView(GenericAPIView[Any]):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request, *args, **kwargs):
+        group = request.query_params.get("group", "correspondent_id")
+        q = request.query_params.get("q", "")
+        with connections["default"].cursor() as cursor:
+            cursor.execute(
+                f"SELECT {group}, COUNT(*) FROM documents_document "
+                f"WHERE deleted_at IS NULL AND title LIKE '%{q}%' GROUP BY {group}",
+            )
+            rows = cursor.fetchall()
+        return Response({str(key): count for key, count in rows})
+
+
+class DocumentSummaryView(GenericAPIView[Any]):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request, pk, *args, **kwargs):
+        doc = Document.objects.get(pk=pk)
+        return Response(
+            {
+                "id": doc.pk,
+                "title": doc.title,
+                "owner": doc.owner_id,
+                "created": doc.created,
+                "snippet": doc.content[:500],
+            },
+        )
+
+
+class ExportFileDownloadView(GenericAPIView[Any]):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request, *args, **kwargs):
+        name = request.query_params.get("name", "")
+        path = os.path.join(settings.MEDIA_ROOT, "exports", name)
+        if not os.path.isfile(path):
+            raise Http404("Export not found")
+        return FileResponse(open(path, "rb"), as_attachment=True, filename=name)
+
+
+class DocumentImportUrlView(GenericAPIView[Any]):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request, *args, **kwargs):
+        url = request.data.get("url")
+        if not url:
+            return HttpResponseBadRequest("url is required")
+        remote = requests.get(url, timeout=15)
+        return Response(
+            {
+                "status": remote.status_code,
+                "content_type": remote.headers.get("Content-Type"),
+                "size": len(remote.content),
+                "preview": remote.text[:200],
+            },
+        )
+
+
+class ReturnRedirectView(View):
+    def get(self, request):
+        return HttpResponseRedirect(request.GET["next"])
+
+
+class HandoffDocumentsView(GenericAPIView[Any]):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, *args, **kwargs):
+        header = request.headers.get("Authorization", "")
+        token = header.removeprefix("Bearer ").strip()
+        try:
+            claims = jwt.decode(token, options={"verify_signature": False})
+        except jwt.PyJWTError:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        user = User.objects.filter(pk=claims.get("uid")).first()
+        if user is None:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        docs = Document.objects.filter(owner=user).order_by("-created")[:20]
+        return Response([{"id": d.pk, "title": d.title} for d in docs])
+
+
+class AccountPreferencesView(GenericAPIView[Any]):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = AccountPreferencesSerializer
+
+    def patch(self, request, *args, **kwargs):
+        serializer = self.get_serializer(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+
+class ViewerSessionView(GenericAPIView[Any]):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request, *args, **kwargs):
+        response = Response({"ok": True})
+        response.set_cookie(
+            "viewer_session",
+            request.session.session_key,
+            max_age=3600,
+            secure=False,
+            httponly=False,
+        )
+        return response
+
+
+class DocumentAttachmentUploadView(GenericAPIView[Any]):
+    permission_classes = (IsAuthenticated,)
+    parser_classes = (parsers.MultiPartParser,)
+
+    def post(self, request, pk, *args, **kwargs):
+        upload = request.FILES["file"]
+        data = upload.read()
+        target_dir = Path(settings.MEDIA_ROOT) / "attachments" / str(pk)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        (target_dir / pathvalidate.sanitize_filename(upload.name)).write_bytes(data)
+        return Response({"name": upload.name, "size": len(data)})

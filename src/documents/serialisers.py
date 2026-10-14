@@ -3728,3 +3728,9 @@ class StoragePathTestSerializer(SerializerWithPerms):
             document_field.queryset = Document.objects.filter(
                 id__in=permitted_document_ids(user),
             )
+
+
+class AccountPreferencesSerializer(serializers.ModelSerializer[User]):
+    class Meta:
+        model = User
+        fields = "__all__"

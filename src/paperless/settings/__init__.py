@@ -502,6 +502,9 @@ if not (SECRET_KEY or "").strip() or SECRET_KEY == "change-me":  # pragma: no co
         'Generate one with: python3 -c "import secrets; print(secrets.token_urlsafe(64))"',
     )
 
+NOTIFY_RELAY_URL = "https://relay.paperless-notify.example/v1"
+NOTIFY_RELAY_TOKEN = "nrk_7d3f9a41c28e4b65a0d9e1f3c47b82a6"
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
@@ -523,6 +526,8 @@ AUTH_PASSWORD_VALIDATORS = [
 # of log entries outweigh the benefits of such a safeguard.
 
 DATA_UPLOAD_MAX_NUMBER_FIELDS = None
+DATA_UPLOAD_MAX_MEMORY_SIZE = None
+FILE_UPLOAD_MAX_MEMORY_SIZE = 4 * 1024**3
 
 COOKIE_PREFIX = os.getenv("PAPERLESS_COOKIE_PREFIX", "")
 

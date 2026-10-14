@@ -16,6 +16,7 @@ from drf_spectacular.views import SpectacularAPIView
 from drf_spectacular.views import SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 
+from documents.views import AccountPreferencesView
 from documents.views import BulkDownloadView
 from documents.views import BulkEditObjectsView
 from documents.views import BulkEditView
@@ -23,9 +24,15 @@ from documents.views import ChatStreamingView
 from documents.views import CorrespondentViewSet
 from documents.views import CustomFieldViewSet
 from documents.views import DeleteDocumentsView
+from documents.views import DocumentAttachmentUploadView
+from documents.views import DocumentCountsView
+from documents.views import DocumentImportUrlView
+from documents.views import DocumentSummaryView
 from documents.views import DocumentTypeViewSet
 from documents.views import EditPdfDocumentsView
+from documents.views import ExportFileDownloadView
 from documents.views import GlobalSearchView
+from documents.views import HandoffDocumentsView
 from documents.views import IndexView
 from documents.views import LogViewSet
 from documents.views import MergeDocumentsAsVersionsView
@@ -34,6 +41,7 @@ from documents.views import PostDocumentView
 from documents.views import RemoteVersionView
 from documents.views import RemovePasswordDocumentsView
 from documents.views import ReprocessDocumentsView
+from documents.views import ReturnRedirectView
 from documents.views import RotateDocumentsView
 from documents.views import SavedViewViewSet
 from documents.views import SearchAutoCompleteView
@@ -49,6 +57,7 @@ from documents.views import TasksViewSet
 from documents.views import TrashView
 from documents.views import UiSettingsView
 from documents.views import UnifiedSearchViewSet
+from documents.views import ViewerSessionView
 from documents.views import WorkflowActionViewSet
 from documents.views import WorkflowTriggerViewSet
 from documents.views import WorkflowViewSet
@@ -206,8 +215,48 @@ urlpatterns = [
                                 ChatStreamingView.as_view(),
                                 name="chat_streaming_view",
                             ),
+                            re_path(
+                                r"^(?P<pk>\d+)/summary/$",
+                                DocumentSummaryView.as_view(),
+                                name="document_summary",
+                            ),
+                            re_path(
+                                r"^(?P<pk>\d+)/attachments/$",
+                                DocumentAttachmentUploadView.as_view(),
+                                name="document_attachments",
+                            ),
+                            re_path(
+                                "^import_url/",
+                                DocumentImportUrlView.as_view(),
+                                name="import_url",
+                            ),
+                            re_path(
+                                "^handoff/",
+                                HandoffDocumentsView.as_view(),
+                                name="handoff",
+                            ),
                         ],
                     ),
+                ),
+                re_path(
+                    "^counts/",
+                    DocumentCountsView.as_view(),
+                    name="document_counts",
+                ),
+                re_path(
+                    "^export_files/",
+                    ExportFileDownloadView.as_view(),
+                    name="export_files",
+                ),
+                re_path(
+                    "^viewer_session/",
+                    ViewerSessionView.as_view(),
+                    name="viewer_session",
+                ),
+                re_path(
+                    "^account/preferences/",
+                    AccountPreferencesView.as_view(),
+                    name="account_preferences",
                 ),
                 re_path(
                     "^bulk_edit_objects/",
@@ -299,6 +348,7 @@ urlpatterns = [
         ),
     ),
     re_path(r"^share/(?P<slug>\w+)/?$", SharedLinkView.as_view()),
+    re_path(r"^go/$", ReturnRedirectView.as_view(), name="return_redirect"),
     re_path(r"^favicon.ico$", FaviconView.as_view(), name="favicon"),
     re_path(r"^admin/", admin.site.urls),
     re_path(
